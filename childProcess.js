@@ -24,17 +24,13 @@ process.on('message', function(data) {
                 };
             })
             .then(function(response) {
-                // response.jsonrpc: '2.0';
                 response.id = data.id;
-                response.method = data.method;
                 return process.send(response);
             });
     } catch (error) {
-        return process.send({
-            // jsonrpc: '2.0',
+        process.send({
             id: data.id,
-            method: data.method,
             error: error
-        });
+        })
     }
 });
