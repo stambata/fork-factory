@@ -1,0 +1,26 @@
+{
+  "name": "fork-factory",
+  "version": "0.0.1",
+  "description": "fork factory",
+  "main": "index.js",
+  "scripts": {
+    "test": "test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/stambata/fork-factory.git"
+  },
+  "keywords": [
+    "fork",
+    "factory"
+  ],
+  "author": "Stamen Peev",
+  "license": "SEE LICENSE IN LICENSE",
+  "bugs": {
+    "url": "https://github.com/stambata/fork-factory/issues"
+  },
+  "homepage": "https://github.com/stambata/fork-factory#readme",
+  "dependencies": {
+    "ut-error": "^5.4.0"
+  }
+}
