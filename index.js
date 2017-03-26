@@ -35,7 +35,7 @@ class Fork extends EventEmitter {
                 return resolve(this);
             }
             this.initialized = true;
-            let forkOptions = {}
+            let forkOptions = {};
             if (this.config.debugPort) {
                 forkOptions.execArgv = ['--debug=' + this.config.debugPort];
             }
