@@ -3,9 +3,9 @@ var ForkFactory = define('forkFactory');
 
 module.exports = {
     forkFactory: ForkFactory,
-    nameNotAString: define('nameNotAString', ForkFactory, '{name} must be a string'),
-    pathNotAString: define('pathNotAString', ForkFactory, '{path} must be a string'),
-    pathNotAbsolute: define('pathNotAbsolute', ForkFactory, '{path} must be an absolute path'),
+    nameNotAString: define('nameNotAString', ForkFactory, 'name {name} must be a string'),
+    pathNotAString: define('pathNotAString', ForkFactory, 'path {path} must be a string'),
+    pathNotAbsolute: define('pathNotAbsolute', ForkFactory, 'path {path} must be an absolute path'),
     moduleNotFound: define('moduleNotFound', ForkFactory, 'module not found for path {path}'),
     configNotAnObject: define('configNotAnObject', ForkFactory, '{config} must be an object'),
     forkNotFound: define('forkNotFound', ForkFactory, 'fork {fork} not found'),

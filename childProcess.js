@@ -8,7 +8,13 @@ if (typeof method !== 'function') {
                 path: process.argv[3]
             }
         }
-    })
+    });
+} else {
+    process.send({
+        result: {
+            status: 'ok'
+        }
+    });
 }
 process.on('message', function(data) {
     try {

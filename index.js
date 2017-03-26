@@ -15,9 +15,10 @@ const getRandomPort = () => new Promise((resolve, reject) => {
         server.close(() => resolve(port));
     });
 });
-class Fork extends EventEmitter{
+class Fork extends EventEmitter {
     constructor(name, absolutePath, config) {
         super();
+        this.initialized = false;
         this.name = name;
         this.path = absolutePath;
         this.requestId = 0;
@@ -25,26 +26,39 @@ class Fork extends EventEmitter{
         this.config = Object.assign({
             timeout: 30000
         }, config);
-        let forkOptions = {}
-        if (this.config.debugPort) {
-            forkOptions.execArgv = ['--debug=' + this.config.debugPort];
-        }
-        this.childProcess = fork(childProcess, [name, absolutePath], forkOptions);
-        this.childProcess.on('error', (error) => {
-            this.dispose();
-            throw error;
-        });
-        this.childProcess.on('message', (response) => {
-            if (response.error && errors[response.method]) {
+        return this;
+    }
+
+    init() {
+        return new Promise((resolve, reject) => {
+            if (this.initialized) {
+                return resolve(this);
+            }
+            this.initialized = true;
+            let forkOptions = {}
+            if (this.config.debugPort) {
+                forkOptions.execArgv = ['--debug=' + this.config.debugPort];
+            }
+            this.childProcess = fork(childProcess, [this.name, this.path], forkOptions);
+            this.childProcess.on('error', (error) => {
                 this.dispose();
-                throw errors[response.method]({params: response.error.params});
-            }
-            let callback = this.callbacks[response.id];
-            if (callback) {
-                delete this.callbacks[response.id];
-                callback(response);
-            }
-        });
+                throw error;
+            });
+            this.childProcess.once('message', (response) => {
+                if (response.error && errors[response.method]) {
+                    this.dispose();
+                    return reject(errors[response.method]({params: response.error.params}));
+                }
+                this.childProcess.on('message', (response) => {
+                    let callback = this.callbacks[response.id];
+                    if (callback) {
+                        delete this.callbacks[response.id];
+                        callback(response);
+                    }
+                });
+                return resolve(this);
+            })
+        })
     }
 
     send(params) {
@@ -78,7 +92,7 @@ class Fork extends EventEmitter{
 }
 const forkFactory = () => {
     let forks = {};
-    const list = () => Object.keys(forks);
+    const stop = () => Object.keys(forks).forEach(name => forks[name].dispose())
     const register = (name, absolutePath, config) => {
         if (typeof name !== 'string') {
             return Promise.reject(errors.nameNotAString({params: {name}}));
@@ -110,22 +124,31 @@ const forkFactory = () => {
         return promise
             .then((config) => {
                 forks[name] = new Fork(name, absolutePath, config);
-                forks[name].on('dispose', () => (delete forks[name]))
-                return get(name);
-            });
+                forks[name].on('dispose', () => (delete forks[name]));
+                return forks[name].init();
+            })
+            .then(() => get(name));
     };
     const get = (name) => {
-        if (typeof name !== 'string') {
-            return Promise.reject(errors.nameNotAString({params: {name}}));
+        if (name) {
+            if (typeof name !== 'string') {
+                return Promise.reject(errors.nameNotAString({params: {name}}));
+            }
+            if (!forks[name]) {
+                return Promise.reject(errors.forkNotFound({params: {fork: name}}));
+            }
+            return Promise.resolve(function() {
+                return forks[name].send(Array.prototype.slice.call(arguments))
+            });
         }
-        if (!forks[name]) {
-            return Promise.reject(errors.forkNotFound({params: {fork: name}}));
-        }
-        return Promise.resolve(function() {
-            return forks[name].send(Array.prototype.slice.call(arguments))
-        });
+        return Promise.resolve(Object.keys(forks).reduce((all, name) => {
+            all[name] = function() {
+                return forks[name].send(Array.prototype.slice.call(arguments))
+            }
+            return all;
+        }, {}));
     };
-    return {list, register, get};
+    return {register, get, stop};
 }
 
 module.exports = () => forkFactory();
