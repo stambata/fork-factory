@@ -6,6 +6,12 @@ var forkManager;
 tape('fork manager should be successfully initialized', (t) => {
     forkManager = forkFactory();
     t.equal(typeof forkManager, 'object', 'forkManager is an object');
+    t.equal(Object.keys(forkManager).length, 5, 'forkManager provides 5 api methods');
+    t.equal(typeof forkManager.stop, 'function', 'forkManager api provides method: stop');
+    t.equal(typeof forkManager.registerMethod, 'function', 'forkManager api provides method: registerMethod');
+    t.equal(typeof forkManager.importMethod, 'function', 'forkManager api provides method: importMethod');
+    t.equal(typeof forkManager.remove, 'function', 'forkManager api provides method: remove');
+    t.equal(typeof forkManager.list, 'function', 'forkManager api provides method: list');
     t.end();
 });
 
