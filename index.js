@@ -29,7 +29,7 @@ class Fork extends EventEmitter {
         return this;
     }
 
-    init() {
+    start() {
         return new Promise((resolve, reject) => {
             if (this.initialized) {
                 return resolve(this);
@@ -41,12 +41,12 @@ class Fork extends EventEmitter {
             }
             this.childProcess = fork(childProcess, [this.name, this.path], forkOptions);
             this.childProcess.on('error', (error) => {
-                this.dispose();
+                this.stop();
                 throw error;
             });
             this.childProcess.once('message', (response) => {
                 if (response.error && errors[response.method]) {
-                    this.dispose();
+                    this.stop();
                     return reject(errors[response.method]({params: response.error.params}));
                 }
                 this.childProcess.on('message', (response) => {
@@ -57,11 +57,11 @@ class Fork extends EventEmitter {
                     }
                 });
                 return resolve(this);
-            })
-        })
+            });
+        });
     }
 
-    send(params) {
+    exec(params) {
         return new Promise((resolve, reject) => {
             if (this.requestId === Number.MAX_SAFE_INTEGER) {
                 this.requestId = 0;
@@ -72,7 +72,7 @@ class Fork extends EventEmitter {
                     delete this.callbacks[requestId];
                     reject(errors.requestTimeout());
                 }, this.config.timeout);
-            })(++this.requestId)
+            })(++this.requestId);
             this.callbacks[this.requestId] = (response) => {
                 clearTimeout(timeout);
                 return response.error ? reject(response.error) : resolve(response.result);
@@ -84,71 +84,74 @@ class Fork extends EventEmitter {
         });
     }
 
-    dispose() {
+    stop() {
         this.childProcess.kill('SIGINT');
-        this.emit('dispose');
+        this.emit('stop');
     }
 
 }
 const forkFactory = () => {
     let forks = {};
-    const stop = () => Object.keys(forks).forEach(name => forks[name].dispose())
-    const register = (name, absolutePath, config) => {
-        if (typeof name !== 'string') {
-            return Promise.reject(errors.nameNotAString({params: {name}}));
-        }
-        if (typeof absolutePath !== 'string') {
-            return Promise.reject(errors.pathNotAString({params: {path: absolutePath}}));
-        }
-        if (!path.isAbsolute(absolutePath)) {
-            return Promise.reject(errors.pathNotAbsolute({params: {path: absolutePath}}));
-        }
-        try {
-            require.resolve(absolutePath);
-        } catch (e) {
-            return Promise.reject(errors.moduleNotFound({params: {path: absolutePath}}));
-        }
-        if (config) {
-            if (typeof config !== 'object') {
-                throw errors.configNotAnObject({params: {config}});
-            }
-        } else {
-            config = {};
-        }
-        let promise = Promise.resolve(config);
-        if (debugMode && !config.debugPort) {
-            promise = promise
-                .then(() => getRandomPort())
-                .then((debugPort) => Object.assign(config, {debugPort}));
-        }
-        return promise
-            .then((config) => {
-                forks[name] = new Fork(name, absolutePath, config);
-                forks[name].on('dispose', () => (delete forks[name]));
-                return forks[name].init();
-            })
-            .then(() => get(name));
+    const importMethod = (name) => {
+        return function() {
+            return forks[name].exec(Array.prototype.slice.call(arguments));
+        };
     };
-    const get = (name) => {
-        if (name) {
+    return {
+        stop: () => Object.keys(forks).forEach(name => forks[name].stop()),
+        registerMethod: (name, absolutePath, config) => {
+            if (typeof name !== 'string') {
+                return Promise.reject(errors.nameNotAString({params: {name}}));
+            }
+            if (typeof absolutePath !== 'string') {
+                return Promise.reject(errors.pathNotAString({params: {path: absolutePath}}));
+            }
+            if (!path.isAbsolute(absolutePath)) {
+                return Promise.reject(errors.pathNotAbsolute({params: {path: absolutePath}}));
+            }
+            try {
+                require.resolve(absolutePath);
+            } catch (e) {
+                return Promise.reject(errors.moduleNotFound({params: {path: absolutePath}}));
+            }
+            if (config) {
+                if (typeof config !== 'object') {
+                    throw errors.configNotAnObject({params: {config}});
+                }
+            } else {
+                config = {};
+            }
+            let promise = Promise.resolve(config);
+            if (debugMode && !config.debugPort) {
+                promise = promise
+                    .then(() => getRandomPort())
+                    .then((debugPort) => Object.assign(config, {debugPort}));
+            }
+            return promise
+                .then((config) => {
+                    forks[name] = new Fork(name, absolutePath, config);
+                    forks[name].on('stop', () => (delete forks[name]));
+                    return forks[name].start();
+                })
+                .then(() => importMethod(name));
+        },
+        importMethod: (name) => {
             if (typeof name !== 'string') {
                 return Promise.reject(errors.nameNotAString({params: {name}}));
             }
             if (!forks[name]) {
                 return Promise.reject(errors.forkNotFound({params: {fork: name}}));
             }
-            return Promise.resolve(function() {
-                return forks[name].send(Array.prototype.slice.call(arguments))
-            });
+            return Promise.resolve(importMethod(name));
+        },
+        remove: (name) => (forks[name].stop()),
+        list: () => {
+            return Object.keys(forks).reduce((all, name) => {
+                all[name] = importMethod(name);
+                return all;
+            }, {});
         }
-        return Promise.resolve(Object.keys(forks).reduce((all, name) => {
-            all[name] = function() {
-                return forks[name].send(Array.prototype.slice.call(arguments))
-            }
-            return all;
-        }, {}));
     };
-    return {register, get, stop};
-}
+};
 
 module.exports = () => forkFactory();
